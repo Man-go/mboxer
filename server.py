@@ -44,7 +44,7 @@ def dicControl(dic):
 def readMethod(dic):
     code, msg, reply, header = (100, "OK", "", "")
     try:
-        with open(f'{dic["Mailbox"]}/{dic["Message"]}') as message_file:
+        with open(f'{dic["Mailbox"]}/{dic["Message"]}', 'rb') as message_file:
             reply = message_file.read()
             length = len(reply)
             header = (f'Content-length:{length}\n')
@@ -60,10 +60,11 @@ def readMethod(dic):
 def lsMethod(dic):
     code, msg, reply, header = (100, "OK", "", "")
     try:
-        atr_content = os.listdir(dic["Mailbox"])
-        atr_length = len(atr_content)
-        header = (f'Number-of-messages:{atr_length}\n')
-        reply = "\n".join(atr_content) + "\n"
+        content = os.listdir(dic["Mailbox"])
+        content.reverse()
+        contentLength = len(content)
+        header = (f'Number-of-messages:{contentLength}\n')
+        reply = "\n".join(content) + "\n"
     except KeyError:
         code, msg = (200, 'Bad request')
     except FileNotFoundError:
@@ -72,31 +73,54 @@ def lsMethod(dic):
 
 
 def writeMethod(dic, opened_file):
+    print(dic)
     code, msg, reply, header = (100, "OK", "", "")
     try:
-        rep_content = opened_file.read(int(dic["Content-length"]))
-        name_content = hashlib.md5(rep_content).hexdigest()
-        with open(f'{dic["Mailbox"]}/{name_content}', "w") as message_file:
-            message_file.write(rep_content.decode('UTF-8'))
+        content = opened_file.read(int(dic["Content-length"]))
+        print(content)
+        name = hashlib.md5(content).hexdigest()
+        with open(f'{dic["Mailbox"]}/{name}', 'wb') as message_file:
+            message_file.write(content)
     except KeyError:
         code, msg = (200, 'Bad request')
     except ValueError:
         code, msg = (200, 'Bad request')
     except FileNotFoundError:
+        print('aaa')
         code, msg = (203, 'No such mailbox')
     return code, msg, reply, header
 
 
 def selectingMethod(meth, dic, opened_file):
     if meth == 'READ':
-        return readMethod(dic)
+        code, msg, reply, header = readMethod(dic)
+        f.write(f'{code} {msg}\n'.encode("UTF-8"))
+        f.write(header.encode('UTF-8'))
+        f.write('\n'.encode('UTF-8'))
+        f.flush()
+        if code == 100:
+            f.write(reply)
+            f.flush()
+        return
     elif meth == 'LS':
-        return lsMethod(dic)
+        code, msg, reply, header = lsMethod(dic)
+        f.write(f'{code} {msg}\n'.encode("UTF-8"))
+        f.write(header.encode('UTF-8'))
+        f.write('\n'.encode('UTF-8'))
+        f.write(reply.encode('UTF-8'))
+        f.flush()
+        return
     elif meth == 'WRITE':
-        return writeMethod(dic, opened_file)
+        code, msg, reply, header = writeMethod(dic, opened_file)
+        f.write(f'{code} {msg}\n'.encode("UTF-8"))
+        f.write(header.encode('UTF-8'))
+        f.write('\n'.encode('UTF-8'))
+        f.write(reply.encode('UTF-8'))
+        f.flush()
+        return
     else:
-        statCode, statMsg = (204, 'Unknown method')
-        f.write(f'{statCode} {statMsg}\n'.encode("UTF-8"))
+        code, msg = (204, 'Unknown method')
+        f.write(f'{code} {msg}\n'.encode("UTF-8"))
         f.write('\n'.encode('UTF-8'))
         f.flush()
         sys.exit(0)
@@ -122,17 +146,13 @@ while True:
                 break
             data = f.readline().decode('UTF-8')
             dicHeaders = readAllData(data, f)
-            statCode, status_msg = dicControl(dicHeaders)
+            statCode, statMsg = dicControl(dicHeaders)
 
+            print(f'status code: {statCode}')
             if statCode == 100:
                 print("method: ", method)
-                statCode, statMsg, conReply, conHeader = selectingMethod(method, dicHeaders, f)
+                selectingMethod(method, dicHeaders, f)
 
-            f.write(f'{statCode} {status_msg}\n'.encode("UTF-8"))
-            f.write(conHeader.encode('UTF-8'))
-            f.write('\n'.encode('UTF-8'))
-            f.write(conReply.encode('UTF-8'))
-            f.flush()
         print(f'{address} closes connection')
         f.close()
         sys.exit(0)
